@@ -5,7 +5,7 @@
  */
 package com.ekupeng.top.comet.client;
 
-import com.ekupeng.top.comet.client.config.MessageType;
+import com.ekupeng.top.comet.client.domain.MessageType;
 
 /**
  * @Description: 消息

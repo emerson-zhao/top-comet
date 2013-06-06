@@ -6,7 +6,7 @@
 package com.ekupeng.top.comet.client.component;
 
 import com.ekupeng.top.comet.client.Message;
-import com.ekupeng.top.comet.client.config.CometOperationCommand;
+import com.ekupeng.top.comet.client.domain.CometOperationCommand;
 
 /**
  * @Description: 淘宝长连接消息监听器接口，仅处理淘宝的Raw消息，不涉及任何业务处理

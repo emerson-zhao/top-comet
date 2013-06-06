@@ -5,9 +5,13 @@
  */
 package com.ekupeng.top.comet.client.component;
 
+import java.util.Date;
+import java.util.SortedMap;
+import java.util.TreeMap;
+
 import org.springframework.stereotype.Component;
 
-import com.ekupeng.top.comet.client.config.CometStatus;
+import com.ekupeng.top.comet.client.domain.CometStatus;
 
 /**
  * @Description: 默认长连接状态监控器
@@ -19,14 +23,23 @@ import com.ekupeng.top.comet.client.config.CometStatus;
 @Component("cometStatusMonitor")
 public class DefaultCometStatusMonitor implements CometStatusMonitor {
 
-	/* 
+	// 维护最近20次状态变化
+	private volatile SortedMap<Date, String> changeLogs = new TreeMap<Date, String>();
+
+	/*
 	 * Override
 	 */
 	@Override
-	public void onStatusChange(CometStatus originalStatus,
+	public synchronized void onStatusChange(CometStatus originalStatus,
 			CometStatus currentStatus) {
-		// TODO Auto-generated method stub
-
+		if (changeLogs.size() >= 20) {
+			changeLogs.remove(changeLogs.firstKey());
+		}
+		String log = originalStatus.name() + " --> " + currentStatus.name();
+		changeLogs.put(new Date(), log);
 	}
 
+	public SortedMap<Date, String> getChangeLogs() {
+		return changeLogs;
+	}
 }

@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import com.ekupeng.top.comet.client.Message;
-import com.ekupeng.top.comet.client.config.MessageType;
+import com.ekupeng.top.comet.client.domain.MessageType;
 
 /**
  * @Description: 默认消息解析器实现

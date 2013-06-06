@@ -16,6 +16,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.web.context.support.WebApplicationContextUtils;
 
 import com.ekupeng.top.comet.client.CometClientContainer;
+import com.ekupeng.top.comet.client.queue.QueueBindingUtil;
 
 /**
  * @Description: 实现ServletContextListener，在上下文初始化时启动Top的Comet长连接
@@ -37,6 +38,17 @@ public class TopCometWebStartListener implements ServletContextListener {
 		ApplicationContext ctx = WebApplicationContextUtils
 				.getRequiredWebApplicationContext(sce.getServletContext());
 
+		// 初始化消息队列及其路由绑定关系
+		QueueBindingUtil queueBindingUtil = (QueueBindingUtil) ctx
+				.getBean("queueBindingUtil");
+		try {
+			queueBindingUtil.declareQueueAndBind();
+		} catch (IOException e) {
+			logger.error("初始化消息队列及其路由绑定关系失败", e);
+			throw new RuntimeException("初始化消息队列及其路由绑定关系失败", e);
+		}
+
+		// 启动长连接客户端容器
 		CometClientContainer taobaoCometService = (CometClientContainer) ctx
 				.getBean("cometClientContainer");
 		try {

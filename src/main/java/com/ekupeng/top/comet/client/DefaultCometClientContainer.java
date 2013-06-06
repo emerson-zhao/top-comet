@@ -13,6 +13,7 @@ import java.util.Date;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,10 +27,10 @@ import com.ekupeng.top.comet.client.component.CometConnectClient;
 import com.ekupeng.top.comet.client.component.CometStatusMonitor;
 import com.ekupeng.top.comet.client.component.MessageListener;
 import com.ekupeng.top.comet.client.component.MessageParser;
-import com.ekupeng.top.comet.client.config.CometOperationCommand;
-import com.ekupeng.top.comet.client.config.CometStatus;
-import com.ekupeng.top.comet.client.config.ContainerConfiguration;
-import com.ekupeng.top.comet.client.config.MessageType;
+import com.ekupeng.top.comet.client.domain.CometOperationCommand;
+import com.ekupeng.top.comet.client.domain.CometStatus;
+import com.ekupeng.top.comet.client.domain.ContainerConfiguration;
+import com.ekupeng.top.comet.client.domain.MessageType;
 
 /**
  * @Description: 长连接客户端容器默认实现:一个容器同一时间仅维护一个连接
@@ -107,7 +108,43 @@ public class DefaultCometClientContainer implements CometClientContainer {
 	/*
 	 * 锁
 	 */
-	final static private Object MUTEX = new Object();
+	final private Object mutex = new Object();
+
+	/*
+	 * 容器启动时间
+	 */
+	private Date startUpTime;
+	/*
+	 * 最近一次容器连接成功时间
+	 */
+	private volatile Date lastStartUpTime;
+
+	/*
+	 * 最近一次心跳时间
+	 */
+	private volatile Date lastHeartBeatTime;
+
+	/*
+	 * 最近一次连接成功后得到的消息总量
+	 */
+	private volatile AtomicLong messageTotalCountFromLastStartUp = new AtomicLong(
+			0);
+
+	/*
+	 * 容器启动后得到的消息总量
+	 */
+	private volatile AtomicLong messageTotalCount = new AtomicLong(0);
+
+	/*
+	 * 最近一次连接成功后得到的业务消息总量
+	 */
+	private volatile AtomicLong bizMessageTotalCountFromLastStartUp = new AtomicLong(
+			0);
+
+	/*
+	 * 容器启动后得到的业务消息总量
+	 */
+	private volatile AtomicLong bizMessageTotalCount = new AtomicLong(0);
 
 	/*
 	 * Override
@@ -128,7 +165,7 @@ public class DefaultCometClientContainer implements CometClientContainer {
 						+ String.valueOf(System.currentTimeMillis()));
 		connectionController.setDaemon(true);
 		connectionController.start();
-
+		startUpTime = new Date();
 	}
 
 	/*
@@ -177,6 +214,9 @@ public class DefaultCometClientContainer implements CometClientContainer {
 						.openNewConnection();
 				messageReader = new BufferedReader(new InputStreamReader(
 						inputStream, "UTF-8"));
+				lastStartUpTime = new Date();
+				messageTotalCountFromLastStartUp = new AtomicLong(0);
+				bizMessageTotalCountFromLastStartUp = new AtomicLong(0);
 				break;
 			} catch (IOException e) {
 				ioe = e;
@@ -213,7 +253,7 @@ public class DefaultCometClientContainer implements CometClientContainer {
 	/**
 	 * 初始化消费者线程池
 	 * 
-	 * @param containerConfiguration2
+	 * @param containerConfiguration
 	 */
 	private void initConsumerPool(ContainerConfiguration containerConfiguration) {
 		Assert.notNull(containerConfiguration);
@@ -301,7 +341,7 @@ public class DefaultCometClientContainer implements CometClientContainer {
 			stop();
 		} else if (command.equals(CometOperationCommand.RECONNECT)) {
 			cometStatus.setCurrentCometStatus(CometStatus.RECONNECTING);
-			MUTEX.notifyAll();
+			mutex.notifyAll();
 		}
 	}
 
@@ -329,6 +369,41 @@ public class DefaultCometClientContainer implements CometClientContainer {
 
 	public void setCometStatusMonitor(CometStatusMonitor cometStatusMonitor) {
 		this.cometStatusMonitor = cometStatusMonitor;
+	}
+
+	@Override
+	public Date getLastStartUpTime() {
+		return lastStartUpTime;
+	}
+
+	@Override
+	public Date getLastHeartBeatTime() {
+		return lastHeartBeatTime;
+	}
+
+	@Override
+	public long getMessageTotalCount() {
+		return messageTotalCount.longValue();
+	}
+
+	@Override
+	public long getBizMessageTotalCountFromLastStartUp() {
+		return bizMessageTotalCountFromLastStartUp.longValue();
+	}
+
+	@Override
+	public long getBizMessageTotalCount() {
+		return bizMessageTotalCount.longValue();
+	}
+
+	@Override
+	public long getMessageTotalCountFromLastStartUp() {
+		return messageTotalCountFromLastStartUp.longValue();
+	}
+
+	@Override
+	public Date getStartUpTime() {
+		return startUpTime;
 	}
 
 	/**
@@ -376,8 +451,7 @@ public class DefaultCometClientContainer implements CometClientContainer {
 							sleepTime = 5 * 60 * 1000;
 						}
 						logger.error("连接重试次数"
-								+ containerConfiguration
-										.getStartErrorRetryInterval()
+								+ containerConfiguration.getConnectRetryCount()
 								+ " 次已满，仍无法成功启动，可能是由于网络环境问题造成，当前时间是  "
 								+ new Date() + " ，根据系统配置，休眠" + sleepTime / 1000
 								/ 60 + " 分钟后再重启！");
@@ -402,9 +476,9 @@ public class DefaultCometClientContainer implements CometClientContainer {
 						CometStatus.CONNECTED)) {
 					// 如果是已连接状态则开始休眠
 					try {
-						synchronized (MUTEX) {
+						synchronized (mutex) {
 							// 休眠至客户端超时，即服务器断开之前
-							MUTEX.wait(containerConfiguration
+							mutex.wait(containerConfiguration
 									.getReconnectInterval());
 							// 使客户端开始重连
 							cometStatus
@@ -454,6 +528,9 @@ public class DefaultCometClientContainer implements CometClientContainer {
 			try {
 				while (!stop) {
 					String msg = messageReader.readLine();
+					if (msg == null) {
+						throw new Exception("从流中读取消息时得到为null,长连接应该已经断开！");
+					}
 					consumerPool.submit(new Consumer(msg));
 				}
 			} catch (Exception e) {
@@ -497,13 +574,17 @@ public class DefaultCometClientContainer implements CometClientContainer {
 			// 解析消息
 			try {
 				Message<String> message = messageParser.parse(msg);
-				System.out.println(message);
+				// System.out.println(message);
 				if (message == null)
 					return;
+				messageTotalCountFromLastStartUp.addAndGet(1);
+				messageTotalCount.addAndGet(1);
 				// 根据不同的消息类型，调用监听器进行处理
 				MessageType type = message.getMessageType();
 				CometOperationCommand command = CometOperationCommand.IGNORE;
 				if (MessageType.BIZ_MESSAGE.equals(type)) {
+					bizMessageTotalCount.addAndGet(1);
+					bizMessageTotalCountFromLastStartUp.addAndGet(1);
 					command = messageListener.onBizMessage(message);
 				} else if (MessageType.CLIENT_MAX_TIME.equals(type)) {
 					command = messageListener.onClientMaxTime(message);
@@ -512,6 +593,7 @@ public class DefaultCometClientContainer implements CometClientContainer {
 				} else if (MessageType.DUPLICATE_CONNECTION.equals(type)) {
 					command = messageListener.onDuplicateConnection();
 				} else if (MessageType.HEART_BEAT.equals(type)) {
+					lastHeartBeatTime = new Date();
 					command = messageListener.onHeartBeat(message);
 				} else if (MessageType.MESSAGE_DISCARD.equals(type)) {
 					command = messageListener.onMessageDiscard(message);

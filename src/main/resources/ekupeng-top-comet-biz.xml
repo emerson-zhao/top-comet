@@ -18,23 +18,8 @@
 	</context:component-scan>
 
 	<context:property-placeholder
-		location="classpath:mongo.properties,classpath:topCometConfig.properties" />
+		location="classpath:*.properties" />
 		
-		<!-- 
-	<mongo:mongo host="${mongo.host}" port="${mongo.port}">
-		<mongo:options connections-per-host="${mongo.connectionsPerHost}"
-			threads-allowed-to-block-for-connectionmultiplier="${mongo.threadsAllowedToBlockForConnectionMultiplier}"
-			connect-timeout="${mongo.connectTimeout}" max-wait-time="${mongo.maxWaitTime}"
-			auto-connect-retry="${mongo.autoConnectRetry}" socket-keep-alive="${mongo.socketKeepAlive}"
-			socket-timeout="${mongo.socketTimeout}" slave-ok="${mongo.slaveOk}"
-			write-number="${mongo.write-number}" write-timeout="${mongo.write-timeout}"
-			write-fsync="${mongo.write-fsync}" />
-	</mongo:mongo>
-	<mongo:db-factory dbname="database" mongo-ref="mongo" />
-	<bean id="mongoTemplate" class="org.springframework.data.mongodb.core.MongoTemplate">
-		<constructor-arg name="mongoDbFactory" ref="mongoDbFactory" />
-		<constructor-arg name="databaseName" value="tb_trade" />
-	</bean>
- -->
-
+	<!--包含action-->
+	<import resource="ekupeng-rabbitmq-biz.xml" />
 </beans>

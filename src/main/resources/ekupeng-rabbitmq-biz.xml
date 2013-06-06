@@ -13,27 +13,16 @@
 
 
 	<rabbit:template id="rabbitTemplate"
-		connection-factory="connectionFactory" routing-key="${top.notify}"
-		queue="TOP.NOTIFY" exchange="TOP.NOTIFY.EXCHANGE" message-converter="jsonMessageConverter" />
+		connection-factory="connectionFactory" routing-key="${appID}.${biz.message.queue}"
+		queue="${appID}.BIZ.MESSAGE.QUEUE" exchange="${appID}.${exchange.name}"
+		message-converter="jsonMessageConverter" />
 
-	<!-- main -->
-	<rabbit:queue id="topNotify" name="TOP.NOTIFY" />
-	<!-- o2o postage -->
-	<rabbit:queue id="tradePaidO2OPostage" name="TRADE.PAID.O2O.POSTAGE" />
-	<rabbit:queue id="tradeSuccessO2OPostage" name="TRADE.SUCCESS.O2O.POSTAGE" />
-	<!-- tb postage -->
-	<rabbit:queue id="tradePaidTbPostage" name="TRADE.PAID.TB.POSTAGE" />
-	<rabbit:queue id="tradeSuccessTbPostage" name="TRADE.SUCCESS.TB.POSTAGE" />
-	<!-- new tb postage -->
-	<rabbit:queue id="tradePaidNewTbPostage" name="TRADE.PAID.NEW.TB.POSTAGE" />
-	<rabbit:queue id="tradeSuccessNewTbPostage" name="TRADE.SUCCESS.NEW.TB.POSTAGE" />
-	<!-- happy postage -->
-	<rabbit:queue id="tradeCreatedHappyPostage" name="TRADE.CREATED.HAPPY.POSTAGE" />
-
-	<!-- error message queue -->
-	<rabbit:queue id="errorMessage" name="ERROR.MESSAGE" />
-
-
+	<!-- Biz -->
+	<rabbit:queue id="bizMessageQueue" name="${appID}.${biz.message.queue}" />
+	<!-- Discard -->
+	<rabbit:queue id="discardMessageQueue" name="${appID}.${discard.message.queue}" />
+	<!-- Error -->
+	<rabbit:queue id="errorMessageQueue" name="${appID}.${error.message.queue}" />
 
 	<!-- poolTaskExecutor -->
 	<bean id="consumerPoolTaskExecutor"
@@ -44,99 +33,39 @@
 		</property>
 	</bean>
 
-	<bean id="listenerErrorHandler" class="com.ekupeng.app.jms.listener.ListenerErrorHandler">
+	<bean id="listenerErrorHandler" class="com.ekupeng.top.comet.client.queue.ListenerErrorHandler">
 		<property name="rabbitTemplate" ref="rabbitTemplate" />
-		<property name="routingKey" value="${error.message}" />
+		<property name="routingKey" value="${appID}.${error.message.queue}" />
 	</bean>
 
-	<!-- main -->
-	<listener-container prefetch="5" concurrency="1"
+	<!-- Biz Container -->
+	<listener-container prefetch="5" concurrency="20"
 		error-handler="listenerErrorHandler" task-executor="consumerPoolTaskExecutor"
 		connection-factory="connectionFactory" message-converter="jsonMessageConverter"
-		xmlns="http://www.springframework.org/schema/rabbit" auto-startup="false">
-		<!-- main  -->
-		<listener ref="rabbitTradeListener" method="onMessage"
-			queue-names="TOP.NOTIFY" />
+		xmlns="http://www.springframework.org/schema/rabbit" auto-startup="true">
+		<listener ref="bizMessageListener" method="onMessage"
+			queue-names="${appID}.${biz.message.queue}" />
 	</listener-container>
 
-	<!-- o2o postage -->
-	<listener-container prefetch="5" concurrency="5"
-		error-handler="listenerErrorHandler" task-executor="consumerPoolTaskExecutor"
-		connection-factory="connectionFactory" message-converter="jsonMessageConverter"
-		xmlns="http://www.springframework.org/schema/rabbit" auto-startup="false">
-		<listener ref="o2oPostageTradeBuyerPayListener" method="onMessage"
-			queue-names="TRADE.PAID.O2O.POSTAGE" />
-	</listener-container>
-	<listener-container prefetch="5" concurrency="5"
-		error-handler="listenerErrorHandler" task-executor="consumerPoolTaskExecutor"
-		connection-factory="connectionFactory" message-converter="jsonMessageConverter"
-		xmlns="http://www.springframework.org/schema/rabbit" auto-startup="false">
-		<listener ref="o2oPostageTradeSuccessListener" method="onMessage"
-			queue-names="TRADE.SUCCESS.O2O.POSTAGE" />
-	</listener-container>
-	<!-- tb postage -->
-	<listener-container prefetch="5" concurrency="5"
-		error-handler="listenerErrorHandler" task-executor="consumerPoolTaskExecutor"
-		connection-factory="connectionFactory" message-converter="jsonMessageConverter"
-		xmlns="http://www.springframework.org/schema/rabbit" auto-startup="false">
-		<listener ref="tbshopPostageTradeBuyerPayListener" method="onMessage"
-			queue-names="TRADE.PAID.TB.POSTAGE" />
-	</listener-container>
-	<listener-container prefetch="5" concurrency="5"
-		error-handler="listenerErrorHandler" task-executor="consumerPoolTaskExecutor"
-		connection-factory="connectionFactory" message-converter="jsonMessageConverter"
-		xmlns="http://www.springframework.org/schema/rabbit" auto-startup="false">
-		<listener ref="tbshopPostageTradeSuccessListener" method="onMessage"
-			queue-names="TRADE.SUCCESS.TB.POSTAGE" />
-	</listener-container>
-	<!-- new tb postage -->
-	<listener-container prefetch="5" concurrency="5"
-		error-handler="listenerErrorHandler" task-executor="consumerPoolTaskExecutor"
-		connection-factory="connectionFactory" message-converter="jsonMessageConverter"
-		xmlns="http://www.springframework.org/schema/rabbit" auto-startup="false">
-		<listener ref="ekpengShopSaleTradeBuyerPayListener" method="onMessage"
-			queue-names="TRADE.PAID.NEW.TB.POSTAGE" />
-	</listener-container>
-	<listener-container prefetch="5" concurrency="5"
-		error-handler="listenerErrorHandler" task-executor="consumerPoolTaskExecutor"
-		connection-factory="connectionFactory" message-converter="jsonMessageConverter"
-		xmlns="http://www.springframework.org/schema/rabbit" auto-startup="false">
-		<listener ref="ekpengShopSaleTradeSuccessListener" method="onMessage"
-			queue-names="TRADE.SUCCESS.NEW.TB.POSTAGE" />
-	</listener-container>
-	<!-- happy postage -->
-	<listener-container prefetch="5" concurrency="5"
-		error-handler="listenerErrorHandler" task-executor="consumerPoolTaskExecutor"
-		connection-factory="connectionFactory" message-converter="jsonMessageConverter"
-		xmlns="http://www.springframework.org/schema/rabbit" auto-startup="false">
-		<listener ref="ekpengCardUseListener" method="onMessage"
-			queue-names="TRADE.CREATED.HAPPY.POSTAGE" />
-	</listener-container>
+	<!-- Error Container <listener-container prefetch="5" concurrency="2" error-handler="listenerErrorHandler" 
+		task-executor="consumerPoolTaskExecutor" connection-factory="connectionFactory" 
+		message-converter="jsonMessageConverter" xmlns="http://www.springframework.org/schema/rabbit" 
+		auto-startup="true"> <listener ref="errorMessageListener" method="onMessage" 
+		queue-names="${appID}.${error.message.queue}" /> </listener-container> -->
 
-	<topic-exchange id="topNotifyTopicExchange" name="TOP.NOTIFY.EXCHANGE"
+
+	<topic-exchange id="topCometExchange" name="${appID}.${exchange.name}"
 		xmlns="http://www.springframework.org/schema/rabbit">
 		<bindings>
-			<!-- main -->
-			<binding queue="TOP.NOTIFY" pattern="${top.notify.pattern}" />
-			<!-- o2o postage -->
-			<binding queue="TRADE.PAID.O2O.POSTAGE" pattern="${trade.paid.pattern}" />
-			<binding queue="TRADE.SUCCESS.O2O.POSTAGE" pattern="${trade.success.pattern}" />
-			<!-- tb postage -->
-			<binding queue="TRADE.PAID.TB.POSTAGE" pattern="${trade.paid.pattern}" />
-			<binding queue="TRADE.SUCCESS.TB.POSTAGE" pattern="${trade.success.pattern}" />
-			<!-- new tb postage -->
-			<binding queue="TRADE.PAID.NEW.TB.POSTAGE" pattern="${trade.paid.pattern}" />
-			<binding queue="TRADE.SUCCESS.NEW.TB.POSTAGE" pattern="${trade.success.pattern}" />
-			<!-- happy postage -->
-			<binding queue="TRADE.CREATED.HAPPY.POSTAGE" pattern="${trade.created.pattern}" />
-			<!-- error message -->
-			<binding queue="ERROR.MESSAGE" pattern="${error.message.pattern}" />
-
+			<!-- Biz -->
+			<binding queue="${appID}.${biz.message.queue}" pattern="${appID}.${biz.message.queue}" />
+			<!-- Discard -->
+			<binding queue="${appID}.${discard.message.queue}" pattern="${appID}.${discard.message.queue}" />
+			<!-- Error -->
+			<binding queue="${appID}.${error.message.queue}" pattern="${appID}.${error.message.queue}" />
 		</bindings>
 	</topic-exchange>
 
 	<rabbit:admin connection-factory="connectionFactory" />
-
-
 
 </beans>

@@ -6,7 +6,7 @@
 package com.ekupeng.top.comet.client;
 
 import com.ekupeng.top.comet.client.component.CometStatusMonitor;
-import com.ekupeng.top.comet.client.config.CometStatus;
+import com.ekupeng.top.comet.client.domain.CometStatus;
 
 /**
  * @Description: 长连接状态包装类

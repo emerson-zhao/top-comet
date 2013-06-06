@@ -31,8 +31,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.ekupeng.top.comet.client.config.CometConfiguration;
-import com.ekupeng.top.comet.client.config.TaobaoConstants;
+import com.ekupeng.top.comet.client.domain.CometConfiguration;
+import com.ekupeng.top.comet.client.domain.TaobaoConstants;
 import com.taobao.api.internal.util.RequestParametersHolder;
 import com.taobao.api.internal.util.StringUtils;
 import com.taobao.api.internal.util.TaobaoHashMap;

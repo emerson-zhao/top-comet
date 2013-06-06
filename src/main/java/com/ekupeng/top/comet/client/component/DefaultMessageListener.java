@@ -11,14 +11,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Marker;
 import org.slf4j.MarkerFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 
 import com.ekupeng.top.comet.client.Message;
-import com.ekupeng.top.comet.client.config.CometOperationCommand;
-import com.ekupeng.top.comet.client.config.ContainerConfiguration;
-import com.ekupeng.top.comet.client.config.MessageType;
+import com.ekupeng.top.comet.client.domain.CometOperationCommand;
+import com.ekupeng.top.comet.client.domain.ContainerConfiguration;
+import com.ekupeng.top.comet.client.domain.MessageType;
 
 /**
  * @Description: 默认消息监听器实现
@@ -28,10 +31,29 @@ import com.ekupeng.top.comet.client.config.MessageType;
  * @version V1.0
  */
 @Component("messageListener")
-public class DefaultMessageListener implements MessageListener {
+public class DefaultMessageListener implements MessageListener,
+		InitializingBean {
 
 	@Autowired
 	private ContainerConfiguration containerConfiguration;
+
+	@Autowired
+	private RabbitTemplate rabbitTemplate;
+
+	@Value("${discard.message.queue}")
+	private String discardRoutingKey;
+
+	@Value("${biz.message.queue}")
+	private String bizRoutingKey;
+
+	@Value("${error.message.queue}")
+	private String errorRoutingKey;
+
+	@Value("${exchange.name}")
+	private String exchangeName;
+
+	@Value("${appID}")
+	private String appId;
 
 	/*
 	 * 文件日志
@@ -77,7 +99,8 @@ public class DefaultMessageListener implements MessageListener {
 	 */
 	@Override
 	public CometOperationCommand onBizMessage(Message message) {
-		// TODO
+		// 将消息发送到业务消息的队列
+		rabbitTemplate.convertAndSend(exchangeName, bizRoutingKey, message);
 		return CometOperationCommand.IGNORE;
 	}
 
@@ -86,7 +109,8 @@ public class DefaultMessageListener implements MessageListener {
 	 */
 	@Override
 	public CometOperationCommand onMessageDiscard(Message message) {
-		// TODO
+		// 将消息发送到丢失消息的队列
+		rabbitTemplate.convertAndSend(exchangeName, discardRoutingKey, message);
 		return CometOperationCommand.IGNORE;
 	}
 
@@ -103,6 +127,9 @@ public class DefaultMessageListener implements MessageListener {
 							.getMessageType().getCode(), message
 							.getMessageType().getDescription(), true));
 		}
+		// 将消息发送到错误消息的队列
+		rabbitTemplate.convertAndSend(exchangeName, errorRoutingKey, message
+				+ "$" + new Date());
 		return CometOperationCommand.RECONNECT;
 	}
 
@@ -117,6 +144,9 @@ public class DefaultMessageListener implements MessageListener {
 				getEmailInfo(groupId, containerConfiguration, message
 						.getMessageType().getCode(), message.getMessageType()
 						.getDescription(), true));
+		// 将消息发送到错误消息的队列
+		rabbitTemplate.convertAndSend(exchangeName, errorRoutingKey, message
+				+ "$" + new Date());
 		// 系统配置的默认等待时间，单位是毫秒
 		long waitSecond = containerConfiguration
 				.getSleepTimeOfServerInUpgrade();
@@ -153,6 +183,9 @@ public class DefaultMessageListener implements MessageListener {
 				getEmailInfo(groupId, containerConfiguration, message
 						.getMessageType().getCode(), message.getMessageType()
 						.getDescription(), true));
+		// 将消息发送到错误消息的队列
+		rabbitTemplate.convertAndSend(exchangeName, errorRoutingKey, message
+				+ "$" + new Date());
 		// 默认等待时间1分钟，单位是毫秒
 		long waitSecond = 60 * 1000;
 		// 解析返回消息中服务器指定的等待时间，单位是秒
@@ -186,6 +219,11 @@ public class DefaultMessageListener implements MessageListener {
 				topCometMarker,
 				getEmailInfo(groupId, containerConfiguration,
 						MessageType.DUPLICATE_CONNECTION.getCode(), msg, true));
+		// 将消息发送到错误消息的队列
+		rabbitTemplate.convertAndSend(exchangeName, errorRoutingKey,
+				MessageType.DUPLICATE_CONNECTION.getCode() + "$"
+						+ MessageType.DUPLICATE_CONNECTION.getDescription()
+						+ "$" + new Date());
 		return CometOperationCommand.IGNORE;
 	}
 
@@ -200,8 +238,12 @@ public class DefaultMessageListener implements MessageListener {
 				getEmailInfo(groupId, containerConfiguration,
 						MessageType.SLOW_CONSUMER.getCode(),
 						MessageType.SLOW_CONSUMER.getDescription(), true));
+		// 将消息发送到错误消息的队列
+		rabbitTemplate.convertAndSend(exchangeName, errorRoutingKey,
+				MessageType.SLOW_CONSUMER.getCode() + "$"
+						+ MessageType.SLOW_CONSUMER.getDescription() + "$"
+						+ new Date());
 		return CometOperationCommand.RECONNECT;
-
 	}
 
 	/*
@@ -215,6 +257,9 @@ public class DefaultMessageListener implements MessageListener {
 				getEmailInfo(groupId, containerConfiguration, message
 						.toString(), message.getMessageType().getDescription(),
 						true));
+		// 将消息发送到错误消息的队列
+		rabbitTemplate.convertAndSend(exchangeName, errorRoutingKey, message
+				+ "$" + new Date());
 		return CometOperationCommand.IGNORE;
 	}
 
@@ -228,6 +273,9 @@ public class DefaultMessageListener implements MessageListener {
 				.error(topCometMarker,
 						getEmailInfo(groupId, containerConfiguration, msg,
 								"出现异常", true), e);
+		// 将消息发送到错误消息的队列
+		rabbitTemplate.convertAndSend(exchangeName, errorRoutingKey, msg + "$"
+				+ e.getMessage() + "$" + new Date());
 		return CometOperationCommand.IGNORE;
 	}
 
@@ -266,6 +314,15 @@ public class DefaultMessageListener implements MessageListener {
 				+ " ,<br> 当前内容生成时间：" + new Date() + " 。<br>（请根据groupId: "
 				+ groupId + " 查询日志以获取详细信息！）";
 		return info;
+	}
+
+	@Override
+	public void afterPropertiesSet() throws Exception {
+		appId = appId.toUpperCase();
+		discardRoutingKey = appId + "." + discardRoutingKey.toUpperCase();
+		bizRoutingKey = appId + "." + bizRoutingKey.toUpperCase();
+		errorRoutingKey = appId + "." + errorRoutingKey.toUpperCase();
+		exchangeName = appId + "." + exchangeName.toUpperCase();
 	}
 
 }
