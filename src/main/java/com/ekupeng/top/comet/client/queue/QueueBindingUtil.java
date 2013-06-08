@@ -119,7 +119,7 @@ public class QueueBindingUtil implements InitializingBean {
 				continue;
 			for (String queue : queues) {
 				// 创建队列
-				queue = appID + "." + queue;
+				queue = binding.replace("*", queue);
 				channel.queueDeclare(queue, true, false, false, null);
 				// 绑定队列到路由
 				channel.queueBind(queue, exchangeName, binding);
